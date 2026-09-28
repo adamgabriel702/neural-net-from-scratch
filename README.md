@@ -1,9 +1,9 @@
 # Neural Net From Scratch 🧠
 
-![tests](https://github.com/SEU_USUARIO/neural-net-from-scratch/actions/workflows/tests.yml/badge.svg)
+![tests](https://github.com/adamgabriel702/neural-net-from-scratch/actions/workflows/tests.yml/badge.svg)
 ![python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![numpy](https://img.shields.io/badge/deps-numpy%20only-orange)
-![tests](https://img.shields.io/badge/tests-52%20passed-brightgreen)
+![tests](https://img.shields.io/badge/tests-68%20passed-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 Rede neural **implementada do zero com NumPy** — sem PyTorch, sem TensorFlow, sem autograd, sem mágica.
@@ -20,8 +20,11 @@ CNN de 2 camadas convolucionais treinada **do zero, em CPU, apenas com NumPy**:
 |---|---|---|
 | MLP `784→128→64→10` | MNIST (10k train) | **~97%** |
 | CNN `Conv(8)→Conv(16)→FC(64)→10` | MNIST (8k train) | **~97.7%** |
+| CNN + **data augmentation** | MNIST (8k train) | **98.5%** |
 
-Tudo com `BatchNorm`, `Dropout`, `Adam`, `CosineAnnealing` e `EarlyStopping` implementados manualmente.
+Tudo com `BatchNorm`, `BatchNorm2D`, `Dropout`, `Adam`, `CosineAnnealing`,
+`EarlyStopping`, `ModelCheckpoint` e `DataLoader` com augmentation —
+todos implementados manualmente.
 
 ### Curva de treino
 
@@ -48,8 +51,10 @@ Tudo com `BatchNorm`, `Dropout`, `Adam`, `CosineAnnealing` e `EarlyStopping` imp
 - **Ativações**: Sigmoid, ReLU, Tanh, Softmax, Linear
 - **Losses**: MSE, Binary Cross-Entropy, Categorical Cross-Entropy
 - **Otimizadores**: SGD, Momentum, Adam (com bias correction)
-- **Schedulers**: StepLR, ExponentialLR, CosineAnnealing, WarmupCosine
-- **Callbacks**: EarlyStopping, ModelCheckpoint, History
+- **Schedulers**: `StepLR`, `ExponentialLR`, `CosineAnnealing`, `WarmupCosine`
+- **Callbacks**: `EarlyStopping`, `ModelCheckpoint`, `History`
+- **DataLoader** com shuffle, batching e `transform` opcional
+- **Data augmentation**: `Compose`, `RandomHorizontalFlip`, `RandomShift`, `RandomRotation90`, `GaussianNoise`
 - **Métricas**: accuracy, confusion matrix, precision / recall / F1
 - **Fusão Softmax + CCE** para gradiente estável
 - **Convolução via im2col + matmul** — mesma técnica das libs de produção
@@ -65,12 +70,13 @@ Tudo com `BatchNorm`, `Dropout`, `Adam`, `CosineAnnealing` e `EarlyStopping` imp
 ## 📦 Instalação
 
 ```bash
-git clone https://github.com/SEU_USUARIO/neural-net-from-scratch
+git clone https://github.com/adamgabriel702/neural-net-from-scratch
 cd neural-net-from-scratch
 pip install -e ".[dev]"
 ```
 
-Única dependência de runtime: `numpy`. `matplotlib`, `scikit-learn` e `pytest` são usados apenas em exemplos, testes e visualização.
+Única dependência de runtime: `numpy`. `matplotlib`, `scikit-learn` e `pytest`
+são usados apenas em exemplos, testes e visualização.
 
 ---
 
@@ -104,7 +110,8 @@ print(np.round(model.predict(X), 3).ravel())
 from nn import (
     Sequential, Conv2D, BatchNorm2D, MaxPool2D, Flatten, Dense,
     ActivationLayer, Dropout, Adam, CosineAnnealing,
-    EarlyStopping, ModelCheckpoint,
+    EarlyStopping, ModelCheckpoint, DataLoader,
+    Compose, RandomShift, GaussianNoise,
 )
 from nn.datasets import load_mnist
 from nn.utils import one_hot, train_test_split, evaluate_and_report
@@ -134,14 +141,22 @@ model.add(Dropout(0.3))
 model.add(Dense(64, 10))
 model.add(ActivationLayer("softmax"))
 
+# Data augmentation — sem flip: 6↔9 e 2↔5 se confundem
+aug = Compose([
+    RandomShift(max_shift=2, seed=0),
+    GaussianNoise(sigma=0.05, seed=0),
+])
+train_loader = DataLoader(Xtr, ytr_oh, batch_size=32,
+                          shuffle=True, transform=aug, seed=0)
+
 # Treino com scheduler + callbacks
 opt = Adam(lr=2e-3)
 model.compile(loss="cce", optimizer=opt)
 scheduler = CosineAnnealing(opt, t_max=15, eta_min=1e-5)
 
 model.fit(
-    Xtr, ytr_oh,
-    epochs=15, batch_size=32,
+    train_loader,
+    epochs=15,
     validation_data=(Xval, yval_oh),
     scheduler=scheduler,
     callbacks=[
@@ -167,9 +182,9 @@ python examples/mnist_cnn.py
 | Arquivo | Descrição | Acurácia |
 |---|---|---|
 | `examples/xor.py`       | Clássico XOR — sanity check | 100% |
-| `examples/iris.py`      | Multiclasse com Softmax + CCE | ~97% |
+| `examples/iris.py`      | Multiclass com Softmax + CCE | ~97% |
 | `examples/mnist.py`     | MLP com BatchNorm + Dropout | ~97% |
-| `examples/mnist_cnn.py` | CNN com Conv2D + BatchNorm2D | ~97.7% |
+| `examples/mnist_cnn.py` | CNN com Conv2D + BatchNorm2D + augmentation | **98.5%** |
 
 ---
 
@@ -179,7 +194,7 @@ python examples/mnist_cnn.py
 pytest
 ```
 
-**52 testes** cobrindo:
+**68 testes** cobrindo:
 
 - Formas (shapes) e comportamento de cada camada
 - Ativações e losses
@@ -189,17 +204,23 @@ pytest
   - `BatchNorm` e `BatchNorm2D`
 - Convergência em XOR e em blobs multiclasse
 - Round-trip de `save` / `load`
-- Schedulers e callbacks (`StepLR`, `CosineAnnealing`, `EarlyStopping`, `ModelCheckpoint`)
+- Schedulers e callbacks
+- `DataLoader` e todas as transforms de augmentation
 
 ### Por que testes de gradiente?
 
-Redes neurais **podem treinar "por acaso"** mesmo com backprop errado, porque otimizadores como Adam normalizam cada parâmetro pela sua própria magnitude RMS e acabam compensando erros sistemáticos de escala. O teste de gradiente numérico elimina essa classe de bugs comparando o gradiente analítico com a derivada por diferenças finitas:
+Redes neurais **podem treinar "por acaso"** mesmo com backprop errado, porque
+otimizadores como Adam normalizam cada parâmetro pela sua própria magnitude
+RMS e acabam compensando erros sistemáticos de escala. O teste de gradiente
+numérico elimina essa classe de bugs comparando o gradiente analítico com a
+derivada por diferenças finitas:
 
 ```
 dL/dθ ≈ (L(θ + ε) − L(θ − ε)) / (2ε)
 ```
 
-Se a razão entre os dois for maior que `1e-5` em qualquer parâmetro, o backprop está errado.
+Se a razão entre os dois for maior que `1e-5` em qualquer parâmetro, o
+backprop está errado.
 
 Este projeto já pegou **três bugs reais** que o treino escondia:
 
@@ -208,6 +229,31 @@ Este projeto já pegou **três bugs reais** que o treino escondia:
 3. `/N` faltando em `BatchNorm.dgamma/dbeta`
 
 Todos silenciosos sob Adam. Todos pegos pelo teste numérico.
+
+---
+
+## 📈 Data augmentation
+
+O treino da CNN usa `RandomShift(±2 px)` + `GaussianNoise(0.05)` via
+`DataLoader`. Isso levou a acurácia de **97.7% → 98.5%** sem mudar a
+arquitetura nem o número de épocas.
+
+`RandomHorizontalFlip` está disponível no pacote mas **não é usado no MNIST**,
+porque `6↔9` e `2↔5` se confundem com flip horizontal. Está lá para outros
+datasets onde orientação não importa.
+
+```python
+from nn import Compose, RandomHorizontalFlip, RandomShift, GaussianNoise
+
+aug = Compose([
+    RandomHorizontalFlip(p=0.5),   # NÃO recomendado no MNIST
+    RandomShift(max_shift=2),
+    GaussianNoise(sigma=0.05),
+])
+```
+
+O `transform` só roda em batches de treino — validação e teste nunca são
+aumentados.
 
 ---
 
@@ -224,6 +270,8 @@ neural-net-from-scratch/
 │   ├── optimizers.py      # SGD, Momentum, Adam
 │   ├── schedulers.py      # StepLR, ExponentialLR, CosineAnnealing, WarmupCosine
 │   ├── callbacks.py       # EarlyStopping, ModelCheckpoint, History
+│   ├── data.py            # DataLoader (batching + shuffle + transform)
+│   ├── augmentation.py    # Compose, RandomFlip, RandomShift, ...
 │   ├── metrics.py         # accuracy, confusion matrix, P/R/F1
 │   ├── model.py           # Sequential
 │   ├── datasets.py        # MNIST, blobs sintéticos
@@ -244,7 +292,8 @@ neural-net-from-scratch/
 │   ├── test_batchnorm.py
 │   ├── test_model.py
 │   ├── test_gradients.py
-│   └── test_schedulers.py
+│   ├── test_schedulers.py
+│   └── test_augmentation.py
 ├── figures/               # geradas pelos exemplos
 ├── .github/workflows/tests.yml
 ├── pyproject.toml
@@ -344,7 +393,7 @@ lr(t) = eta_min + 0.5 · (base_lr − eta_min) · (1 + cos(π · t / T))
 - Como **BatchNorm** e **Dropout** se comportam diferente em treino vs. inferência
 - Como **fundir softmax + CCE** evita instabilidade numérica
 - Como escrever **testes de gradiente** que pegam bugs reais de escala
-- Como estruturar um **framework de ML** com API limpa em ~1000 linhas
+- Como estruturar um **framework de ML** com API limpa em ~1200 linhas
 
 ---
 
@@ -359,13 +408,14 @@ lr(t) = eta_min + 0.5 · (base_lr − eta_min) · (1 + cos(π · t / T))
 - [x] Save / Load
 - [x] LR Schedulers (StepLR, Cosine, Warmup)
 - [x] Callbacks (EarlyStopping, ModelCheckpoint)
+- [x] DataLoader + data augmentation
 - [x] Datasets + utils reusáveis
 - [x] Visualizações (loss, confusão, filtros)
 - [x] Testes com verificação de gradiente
 - [x] CI no GitHub Actions
-- [ ] Data augmentation (flip, shift)
+- [ ] Notebook didático derivando o backprop (em progresso)
 - [ ] RNN simples
-- [ ] Notebook didático derivando o backprop
+- [ ] Empacotar no PyPI
 - [ ] Mixed precision (float32)
 
 ---
