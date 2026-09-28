@@ -27,8 +27,12 @@ def test_timedistributed_backward_shape():
 def test_timedistributed_delegates_params():
     dense = Dense(4, 2)
     td = TimeDistributed(dense)
-    assert td.params() is dense.params()
-    assert td.grads() is dense.grads()
+    # Mesmos objetos numpy, não cópias
+    assert td.params()["W"] is dense.params()["W"]
+    assert td.params()["b"] is dense.params()["b"]
+    # Idem para grads
+    assert td.grads()["W"] is dense.grads()["W"]
+    assert td.grads()["b"] is dense.grads()["b"]
 
 
 def test_timedistributed_rejects_non_layer():

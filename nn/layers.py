@@ -122,8 +122,7 @@ class ActivationLayer(Layer):
 
     def backward(self, dout):
         if self.name == "softmax":
-            # Jacobiano: dL/dz_i = a_i * (dL/da_i - sum_j dL/da_j * a_j)
-            dot = np.sum(dout * self._A, axis=1, keepdims=True)
+            dot = np.sum(dout * self._A, axis=-1, keepdims=True)
             return self._A * (dout - dot)
         return dout * self.fn_back(self._Z, self._A)
 
