@@ -1,11 +1,10 @@
 # pico-nn 🧠
 
 [![tests](https://github.com/adamgabriel702/neural-net-from-scratch/actions/workflows/tests.yml/badge.svg)](https://github.com/adamgabriel702/neural-net-from-scratch/actions/workflows/tests.yml)
-[![publish](https://github.com/adamgabriel702/neural-net-from-scratch/actions/workflows/publish.yml/badge.svg)](https://github.com/adamgabriel702/neural-net-from-scratch/actions/workflows/publish.yml)
-[![PyPI](https://img.shields.io/pypi/v/pico-nn)](https://pypi.org/project/pico-nn/)
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://pypi.org/project/pico-nn/)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://github.com/adamgabriel702/neural-net-from-scratch)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-68%20passed-brightgreen)](tests/)
+[![deps](https://img.shields.io/badge/deps-numpy%20only-orange)](requirements.txt)
 
 Rede neural **implementada do zero com NumPy** — sem PyTorch, sem TensorFlow, sem autograd, sem mágica.
 
@@ -70,19 +69,25 @@ todos implementados manualmente.
 
 ## 📦 Instalação
 
-Do PyPI:
+### Direto do GitHub (funciona agora)
+
+```bash
+pip install git+https://github.com/adamgabriel702/neural-net-from-scratch.git
+```
+
+### Com visualizações (matplotlib)
+
+```bash
+pip install "pico-nn[viz] @ git+https://github.com/adamgabriel702/neural-net-from-scratch.git"
+```
+
+### Do PyPI (em breve)
 
 ```bash
 pip install pico-nn
 ```
 
-Para visualizações (loss curves, confusion matrix, filtros):
-
-```bash
-pip install pico-nn[viz]
-```
-
-Ou do código-fonte (para desenvolvimento):
+### Código-fonte (para desenvolvimento)
 
 ```bash
 git clone https://github.com/adamgabriel702/neural-net-from-scratch
@@ -337,7 +342,7 @@ neural-net-from-scratch/
 │   ├── test_gradients.py
 │   ├── test_schedulers.py
 │   └── test_augmentation.py
-├── figures/               # geradas pelos exemplos
+├── figures/               # imagens geradas pelos exemplos
 ├── .github/workflows/
 │   ├── tests.yml          # test matrix + build + smoke
 │   └── publish.yml        # PyPI via Trusted Publishing
@@ -440,7 +445,7 @@ lr(t) = eta_min + 0.5 · (base_lr − eta_min) · (1 + cos(π · t / T))
 - Como **fundir softmax + CCE** evita instabilidade numérica
 - Como escrever **testes de gradiente** que pegam bugs reais de escala
 - Como estruturar um **framework de ML** com API limpa em ~1200 linhas
-- Como **empacotar e publicar** uma biblioteca Python no PyPI
+- Como **empacotar** um projeto Python com `pyproject.toml` e publicá-lo
 
 ---
 
@@ -461,7 +466,7 @@ lr(t) = eta_min + 0.5 · (base_lr − eta_min) · (1 + cos(π · t / T))
 - [x] Testes com verificação de gradiente (68 testes)
 - [x] CI no GitHub Actions + smoke + build
 - [x] Notebook didático derivando o backprop
-- [x] Publicado no PyPI (`pip install pico-nn`)
+- [ ] Publicação no PyPI
 - [ ] RNN simples (`SimpleRNN` + `LSTM`)
 - [ ] Mixed precision (float32)
 
@@ -477,20 +482,6 @@ git clone https://github.com/adamgabriel702/neural-net-from-scratch
 cd neural-net-from-scratch
 pip install -e ".[dev]"
 pytest
-```
-
-Para publicar uma nova versão:
-
-```bash
-# 1. Atualize version em pyproject.toml (SemVer)
-# 2. Commit
-git add pyproject.toml
-git commit -m "release: v0.1.1"
-
-# 3. Tag e push
-git tag v0.1.1
-git push origin v0.1.1
-# → GitHub Actions publica no PyPI via Trusted Publishing
 ```
 
 ---
