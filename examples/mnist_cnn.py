@@ -36,8 +36,11 @@ def build_model():
 
 
 def main():
-    N = 8000
-    EPOCHS = 15
+    import os
+
+    smoke = os.environ.get("SMOKE") == "1"
+    N = 512 if smoke else 8000
+    EPOCHS = 1 if smoke else 15
 
     Xtr, ytr, Xte, yte = load_mnist(flatten=False)
     Xtr, ytr = Xtr[:N], ytr[:N]
@@ -50,7 +53,8 @@ def main():
     model = build_model()
     opt = Adam(lr=2e-3)
     model.compile(loss="cce", optimizer=opt)
-    model.summary()
+    if not smoke:
+        model.summary()
 
     scheduler = CosineAnnealing(opt, t_max=EPOCHS, eta_min=1e-5)
 
@@ -58,34 +62,36 @@ def main():
     callbacks = [
         EarlyStopping(monitor="val_loss", patience=4, mode="min"),
         ModelCheckpoint("checkpoints/mnist_cnn_best.npz",
-                        monitor="val_loss", mode="min"),
+                        monitor="val_loss", mode="min", verbose=not smoke),
     ]
 
     model.fit(
         Xtr, ytr_oh,
         epochs=EPOCHS, batch_size=32,
+        verbose=not smoke,
         validation_data=(Xval, yval_oh),
         scheduler=scheduler,
         callbacks=callbacks,
     )
 
-    os.makedirs("figures", exist_ok=True)
-    plot_loss_curve(model.history, path="figures/mnist_cnn_loss.png",
-                    title="MNIST CNN — training curve")
-    if "lr" in model.history:
-        plot_lr_curve(model.history, path="figures/mnist_cnn_lr.png")
+    if not smoke:
+        os.makedirs("figures", exist_ok=True)
+        plot_loss_curve(model.history, path="figures/mnist_cnn_loss.png",
+                        title="MNIST CNN — training curve")
+        if "lr" in model.history:
+            plot_lr_curve(model.history, path="figures/mnist_cnn_lr.png")
 
-    # Melhor modelo salvo em disco
     model.load("checkpoints/mnist_cnn_best.npz")
-    report = evaluate_and_report(model, Xte, yte, yte_oh, title="MNIST CNN — Test")
+    report = evaluate_and_report(model, Xte, yte, yte_oh,
+                                 title="MNIST CNN — Test",
+                                 print_cm=not smoke)
 
-    plot_confusion_matrix(report["confusion_matrix"],
-                          path="figures/mnist_cnn_confusion.png",
-                          title="MNIST CNN — Confusion matrix")
-
-    # Filtros aprendidos pela primeira Conv2D
-    plot_filters(model.layers[0], path="figures/mnist_cnn_filters.png",
-                 title="Filtros da 1ª Conv2D (média sobre canais)")
+    if not smoke:
+        plot_confusion_matrix(report["confusion_matrix"],
+                              path="figures/mnist_cnn_confusion.png",
+                              title="MNIST CNN — Confusion matrix")
+        plot_filters(model.layers[0], path="figures/mnist_cnn_filters.png",
+                     title="Filtros da 1ª Conv2D (média sobre canais)")
 
     model.save("checkpoints/mnist_cnn_final.npz")
 
