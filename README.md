@@ -1,10 +1,11 @@
-# Neural Net From Scratch 🧠
+# pico-nn 🧠
 
-![tests](https://github.com/adamgabriel702/neural-net-from-scratch/actions/workflows/tests.yml/badge.svg)
-![python](https://img.shields.io/badge/python-3.10%2B-blue)
-![numpy](https://img.shields.io/badge/deps-numpy%20only-orange)
-![tests](https://img.shields.io/badge/tests-68%20passed-brightgreen)
-![license](https://img.shields.io/badge/license-MIT-green)
+[![tests](https://github.com/adamgabriel702/neural-net-from-scratch/actions/workflows/tests.yml/badge.svg)](https://github.com/adamgabriel702/neural-net-from-scratch/actions/workflows/tests.yml)
+[![publish](https://github.com/adamgabriel702/neural-net-from-scratch/actions/workflows/publish.yml/badge.svg)](https://github.com/adamgabriel702/neural-net-from-scratch/actions/workflows/publish.yml)
+[![PyPI](https://img.shields.io/pypi/v/pico-nn)](https://pypi.org/project/pico-nn/)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://pypi.org/project/pico-nn/)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-68%20passed-brightgreen)](tests/)
 
 Rede neural **implementada do zero com NumPy** — sem PyTorch, sem TensorFlow, sem autograd, sem mágica.
 
@@ -63,11 +64,25 @@ todos implementados manualmente.
 - **Visualização** com matplotlib (loss curves, confusion matrix, filtros)
 - **Datasets** prontos (MNIST com download automático, blobs sintéticos)
 - **Testes** com `pytest` — incluindo **verificação de gradiente numérico**
-- **CI** via GitHub Actions (Python 3.10, 3.11, 3.12 + smoke test)
+- **CI** via GitHub Actions (Python 3.10, 3.11, 3.12 + smoke test + build)
 
 ---
 
 ## 📦 Instalação
+
+Do PyPI:
+
+```bash
+pip install pico-nn
+```
+
+Para visualizações (loss curves, confusion matrix, filtros):
+
+```bash
+pip install pico-nn[viz]
+```
+
+Ou do código-fonte (para desenvolvimento):
 
 ```bash
 git clone https://github.com/adamgabriel702/neural-net-from-scratch
@@ -75,8 +90,8 @@ cd neural-net-from-scratch
 pip install -e ".[dev]"
 ```
 
-Única dependência de runtime: `numpy`. `matplotlib`, `scikit-learn` e `pytest`
-são usados apenas em exemplos, testes e visualização.
+Única dependência de runtime: `numpy`. `matplotlib`, `scikit-learn` e
+`pytest` são usados apenas em exemplos, testes e visualização.
 
 ---
 
@@ -182,7 +197,7 @@ python examples/mnist_cnn.py
 | Arquivo | Descrição | Acurácia |
 |---|---|---|
 | `examples/xor.py`       | Clássico XOR — sanity check | 100% |
-| `examples/iris.py`      | Multiclass com Softmax + CCE | ~97% |
+| `examples/iris.py`      | Multiclasse com Softmax + CCE | ~97% |
 | `examples/mnist.py`     | MLP com BatchNorm + Dropout | ~97% |
 | `examples/mnist_cnn.py` | CNN com Conv2D + BatchNorm2D + augmentation | **98.5%** |
 
@@ -232,6 +247,30 @@ Todos silenciosos sob Adam. Todos pegos pelo teste numérico.
 
 ---
 
+## 📓 Notebook didático
+
+Para quem quer **entender** o backprop, e não só usar:
+
+```bash
+pip install jupytext
+jupytext --to notebook notebooks/backprop_from_scratch.py
+```
+
+Ou abra `notebooks/backprop_from_scratch.ipynb` direto.
+
+O notebook deriva à mão:
+
+- Gradiente de um neurônio individual
+- Gradiente de uma camada densa
+- Backprop em uma rede de duas camadas
+- Verificação numérica contra diferenças finitas
+- Treino no XOR com backprop manual
+- Comparação com o pacote `nn`
+
+Toda derivação é validada numericamente dentro do próprio notebook.
+
+---
+
 ## 📈 Data augmentation
 
 O treino da CNN usa `RandomShift(±2 px)` + `GaussianNoise(0.05)` via
@@ -263,6 +302,7 @@ aumentados.
 neural-net-from-scratch/
 ├── nn/
 │   ├── __init__.py
+│   ├── py.typed           # PEP 561
 │   ├── activations.py     # sigmoid, relu, tanh, softmax, linear
 │   ├── losses.py          # MSE, BCE, CCE + derivadas (sum-reduced)
 │   ├── layers.py          # Dense, Activation, Dropout, BatchNorm,
@@ -282,6 +322,9 @@ neural-net-from-scratch/
 │   ├── iris.py
 │   ├── mnist.py
 │   └── mnist_cnn.py
+├── notebooks/
+│   ├── backprop_from_scratch.py      # jupytext
+│   └── backprop_from_scratch.ipynb   # gerado
 ├── tests/
 │   ├── conftest.py
 │   ├── helpers.py         # check_gradients (numérico)
@@ -295,8 +338,11 @@ neural-net-from-scratch/
 │   ├── test_schedulers.py
 │   └── test_augmentation.py
 ├── figures/               # geradas pelos exemplos
-├── .github/workflows/tests.yml
+├── .github/workflows/
+│   ├── tests.yml          # test matrix + build + smoke
+│   └── publish.yml        # PyPI via Trusted Publishing
 ├── pyproject.toml
+├── MANIFEST.in
 ├── requirements.txt
 ├── LICENSE
 └── README.md
@@ -394,6 +440,7 @@ lr(t) = eta_min + 0.5 · (base_lr − eta_min) · (1 + cos(π · t / T))
 - Como **fundir softmax + CCE** evita instabilidade numérica
 - Como escrever **testes de gradiente** que pegam bugs reais de escala
 - Como estruturar um **framework de ML** com API limpa em ~1200 linhas
+- Como **empacotar e publicar** uma biblioteca Python no PyPI
 
 ---
 
@@ -411,11 +458,11 @@ lr(t) = eta_min + 0.5 · (base_lr − eta_min) · (1 + cos(π · t / T))
 - [x] DataLoader + data augmentation
 - [x] Datasets + utils reusáveis
 - [x] Visualizações (loss, confusão, filtros)
-- [x] Testes com verificação de gradiente
-- [x] CI no GitHub Actions
-- [ ] Notebook didático derivando o backprop (em progresso)
-- [ ] RNN simples
-- [ ] Empacotar no PyPI
+- [x] Testes com verificação de gradiente (68 testes)
+- [x] CI no GitHub Actions + smoke + build
+- [x] Notebook didático derivando o backprop
+- [x] Publicado no PyPI (`pip install pico-nn`)
+- [ ] RNN simples (`SimpleRNN` + `LSTM`)
 - [ ] Mixed precision (float32)
 
 ---
@@ -426,8 +473,24 @@ Pull requests são bem-vindos. Para mudanças grandes, abra uma issue primeiro
 para alinharmos o escopo.
 
 ```bash
+git clone https://github.com/adamgabriel702/neural-net-from-scratch
+cd neural-net-from-scratch
 pip install -e ".[dev]"
 pytest
+```
+
+Para publicar uma nova versão:
+
+```bash
+# 1. Atualize version em pyproject.toml (SemVer)
+# 2. Commit
+git add pyproject.toml
+git commit -m "release: v0.1.1"
+
+# 3. Tag e push
+git tag v0.1.1
+git push origin v0.1.1
+# → GitHub Actions publica no PyPI via Trusted Publishing
 ```
 
 ---
