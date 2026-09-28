@@ -6,3 +6,4 @@ data/
 checkpoints/
 *.npz
 .pytest_cache/
+neural_net_from_scratch.egg-info/
