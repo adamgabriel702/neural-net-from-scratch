@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neural-net-from-scratch"
+version = "0.1.0"
+description = "MLP implementado do zero com NumPy — sem PyTorch, sem TensorFlow."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Adam Gabriel" }]
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "scikit-learn>=1.3",
+    "matplotlib>=3.7",
+]
+
+[project.urls]
+Homepage = "https://github.com/adamgabriel702/neural-net-from-scratch"
+
+[tool.setuptools.packages.find]
+include = ["nn*"]
+
+# ---- Configuração do pytest ----
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-v --tb=short"
