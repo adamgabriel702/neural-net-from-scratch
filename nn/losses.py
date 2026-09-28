@@ -5,13 +5,16 @@ class Loss:
     """
     Funções de perda e suas derivadas em relação à ATIVAÇÃO DE SAÍDA (A).
 
-    Convenção adotada:
+    Convenção de escala:
       - A perda é `mean` sobre as amostras e `sum` sobre as dimensões de saída.
-        Ou seja:  L = (1/m) * Σ_i L_i,  onde L_i agrega as saídas.
       - As derivadas retornadas por `*_backward` são "sum-reduced" sobre o batch
         (NÃO dividem por m). A divisão por m acontece em `Dense.backward`,
-        aplicada somente em dW e db. Isso mantém o gradiente em relação às
-        ativações intermediárias consistente ao longo do backpropagation.
+        `Conv2D.backward` e `BatchNorm.backward`, aplicada somente nos
+        gradientes dos parâmetros.
+
+    Convenção de eixo:
+      - Todas as somas sobre "canais de classe" usam `axis=-1`, o que funciona
+        uniformemente para (N, C), (N, T, C) e (N, H, W, C).
     """
 
     # ---------------- MSE ----------------

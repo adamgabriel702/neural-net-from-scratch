@@ -27,10 +27,9 @@ def test_timedistributed_backward_shape():
 def test_timedistributed_delegates_params():
     dense = Dense(4, 2)
     td = TimeDistributed(dense)
-    # Mesmos objetos numpy, não cópias
+    # Mesmos OBJETOS numpy (não cópias)
     assert td.params()["W"] is dense.params()["W"]
     assert td.params()["b"] is dense.params()["b"]
-    # Idem para grads
     assert td.grads()["W"] is dense.grads()["W"]
     assert td.grads()["b"] is dense.grads()["b"]
 
@@ -54,7 +53,6 @@ def test_timedistributed_matches_manual_loop():
     X = np.random.randn(2, 4, 5)
     out_td = td.forward(X)
 
-    # Manual: aplica dense a cada (N, 5) e empilha
     manual = np.stack(
         [dense.forward(X[:, t, :]) for t in range(X.shape[1])],
         axis=1,
@@ -70,23 +68,18 @@ def test_timedistributed_dense_gradients():
     y[np.arange(3), y_idx] = 1.0
 
     model = Sequential()
-    model.add(TimeDistributed(Dense(4, 6, init="xavier")))
+    model.add(TimeDistributed(Dense(4, 6, init="xavier", seed=0)))
     model.add(ActivationLayer("tanh"))
-    model.add(TimeDistributed(Dense(6, 3, init="xavier")))
+    model.add(TimeDistributed(Dense(6, 3, init="xavier", seed=1)))
     model.add(ActivationLayer("softmax"))
     model.compile(loss="cce", optimizer=Adam(lr=1e-2))
 
-    # A saída é (N, T, 3). Para a loss CCE funcionar, y precisa ser (N, T, 3).
+    # A saída é (N, T, 3). y_td replica o one-hot sobre T.
     y_td = np.tile(y[:, None, :], (1, 5, 1))
 
-    # A "última camada" é Activation(softmax) com shape (N, T, 3); o
-    # Sequential atual espera y com shape alinhado ao forward em modo
-    # padrão. Aqui, o backward fundido com softmax não se aplica porque
-    # a última ativação processa um tensor 3D.
     model.forward(X)
     model.backward(y_td)
 
-    # Checa gradientes da primeira TimeDistributed
     for key in ("W", "b"):
         analytic = model.layers[0].grads()[key]
         numeric = _numerical_grad(model, X, y_td, layer_idx=0, key=key,
@@ -108,9 +101,9 @@ def test_timedistributed_gradients_second_layer():
             y[i, t, y_idx[i, t]] = 1.0
 
     model = Sequential()
-    model.add(TimeDistributed(Dense(5, 6, init="xavier")))
+    model.add(TimeDistributed(Dense(5, 6, init="xavier", seed=0)))
     model.add(ActivationLayer("tanh"))
-    model.add(TimeDistributed(Dense(6, 3, init="xavier")))
+    model.add(TimeDistributed(Dense(6, 3, init="xavier", seed=1)))
     model.add(ActivationLayer("softmax"))
     model.compile(loss="cce", optimizer=Adam(lr=1e-2))
 
@@ -152,7 +145,7 @@ def _numerical_grad(model, X, y, layer_idx, key, eps=1e-6, training=False):
 # ---------- integração com RNN ----------
 def test_rnn_with_timedistributed_output():
     """
-    RNN(return_seq=True) → TimeDistributed(Dense) → softmax
+    RNN(return_seq=True) → TimeDistributed(Dense) → softmax.
     Cada timestep produz uma predição própria.
     """
     rng = np.random.default_rng(0)
@@ -167,15 +160,15 @@ def test_rnn_with_timedistributed_output():
 
     model = Sequential()
     model.add(SimpleRNN(D, 8, return_sequences=True, seed=0))
-    model.add(TimeDistributed(Dense(8, C, init="xavier")))
+    model.add(TimeDistributed(Dense(8, C, init="xavier", seed=1)))
     model.add(ActivationLayer("softmax"))
     model.compile(loss="cce", optimizer=Adam(lr=0.01))
 
-    model.fit(X, y, epochs=200, batch_size=4, verbose=False)
+    model.fit(X, y, epochs=400, batch_size=4, verbose=False)
 
     preds = model.predict(X)
     assert preds.shape == (N, T, C)
 
-    pred_classes = np.argmax(preds, axis=2)
+    pred_classes = np.argmax(preds, axis=-1)
     acc = (pred_classes == y_idx).mean()
     assert acc > 0.5

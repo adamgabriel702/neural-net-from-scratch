@@ -2,7 +2,13 @@ import numpy as np
 
 
 class Activation:
-    """Ativações com forward e backward desacoplados (mais limpo que deriv)."""
+    """
+    Funções de ativação com forward e backward desacoplados.
+
+    Convenção de eixo: operações que agem "sobre as classes" (softmax)
+    usam `axis=-1`. Isso funciona uniformemente para tensores 2D `(N, C)`,
+    3D `(N, T, C)` e 4D `(N, H, W, C)`.
+    """
 
     @staticmethod
     def sigmoid(z):
@@ -31,9 +37,11 @@ class Activation:
 
     @staticmethod
     def softmax(z):
-        z = z - np.max(z, axis=1, keepdims=True)  # estabilidade numérica
+        # `axis=-1` para suportar (N, C), (N, T, C) e (N, H, W, C).
+        # `axis=1` seria o eixo do tempo em tensores 3D — errado.
+        z = z - np.max(z, axis=-1, keepdims=True)
         exp = np.exp(z)
-        return exp / np.sum(exp, axis=1, keepdims=True)
+        return exp / np.sum(exp, axis=-1, keepdims=True)
 
     @staticmethod
     def linear(z):
@@ -48,6 +56,6 @@ ACTIVATIONS = {
     "sigmoid": (Activation.sigmoid, Activation.sigmoid_backward),
     "relu":    (Activation.relu,    Activation.relu_backward),
     "tanh":    (Activation.tanh,    Activation.tanh_backward),
-    "softmax": (Activation.softmax, None),  # tratado junto com CE
+    "softmax": (Activation.softmax, None),  # tratado junto com CCE em Sequential
     "linear":  (Activation.linear,  Activation.linear_backward),
 }

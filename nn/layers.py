@@ -8,6 +8,8 @@ Convenções:
 - Layers com parâmetros treináveis expõem `params()` e `grads()`.
 - Layers com estado não-treinável (ex.: running_mean em BatchNorm) expõem
   `buffers()`, que é salvo/carregado junto com o modelo.
+- Operações que agem "sobre as classes" (softmax, etc.) usam `axis=-1`,
+  funcionando uniformemente para (N, C), (N, T, C) e (N, H, W, C).
 """
 
 import numpy as np
@@ -47,13 +49,9 @@ class Dense(Layer):
     Parâmetros
     ----------
     in_dim : int
-        Dimensão de entrada.
     out_dim : int
-        Dimensão de saída.
     init : {"xavier", "he", "small"}
-        Estratégia de inicialização dos pesos.
     seed : int ou None
-        Semente para reprodutibilidade.
     """
 
     def __init__(self, in_dim, out_dim, init="xavier", seed=None):
@@ -100,8 +98,8 @@ class ActivationLayer(Layer):
     Aplica uma função de ativação não-linear.
 
     Suporta: sigmoid, relu, tanh, softmax, linear.
-    Para softmax, o backward usa o Jacobiano completo
-    (mas em `Sequential` com loss CCE, o cálculo é fundido).
+    Para softmax, o backward usa o Jacobiano completo em `axis=-1`.
+    Em `Sequential` com loss CCE, o cálculo é fundido (A - y).
     """
 
     def __init__(self, name):
@@ -122,6 +120,8 @@ class ActivationLayer(Layer):
 
     def backward(self, dout):
         if self.name == "softmax":
+            # Jacobiano: dL/dz_i = a_i * (dL/da_i - sum_j dL/da_j * a_j)
+            # `axis=-1` para suportar tensores 3D/4D.
             dot = np.sum(dout * self._A, axis=-1, keepdims=True)
             return self._A * (dout - dot)
         return dout * self.fn_back(self._Z, self._A)
@@ -174,7 +174,7 @@ class BatchNorm(Layer):
     Batch Normalization (Ioffe & Szegedy, 2015).
 
     Normaliza cada feature pelas estatísticas do mini-batch durante o
-    treino e usa médias móveis no inference. Possui parâmetros treináveis
+    treino e usa médias móveis no inference. Parâmetros treináveis
     (gamma, beta) e buffers não-treináveis (running_mean, running_var).
     """
 
@@ -241,6 +241,85 @@ class BatchNorm(Layer):
 
 
 # ============================================================
+# BatchNorm2D (channels-first: N, C, H, W)
+# ============================================================
+class BatchNorm2D(Layer):
+    """
+    Batch Normalization para Conv2D.
+
+    Normaliza cada canal separadamente pelas estatísticas do mini-batch
+    sobre os eixos (N, H, W) durante o treino, e usa médias móveis no
+    inference. Parâmetros treináveis (gamma, beta) por canal.
+    """
+
+    def __init__(self, num_channels, momentum=0.9, eps=1e-5):
+        self.gamma = np.ones((1, num_channels, 1, 1), dtype=np.float64)
+        self.beta = np.zeros((1, num_channels, 1, 1), dtype=np.float64)
+        self.dgamma = None
+        self.dbeta = None
+
+        self.running_mean = np.zeros((1, num_channels, 1, 1), dtype=np.float64)
+        self.running_var = np.ones((1, num_channels, 1, 1), dtype=np.float64)
+
+        self.momentum = momentum
+        self.eps = eps
+        self._cache = None
+
+    def forward(self, X, training=True):
+        if training:
+            mu = X.mean(axis=(0, 2, 3), keepdims=True)
+            var = X.var(axis=(0, 2, 3), keepdims=True)
+            std_inv = 1.0 / np.sqrt(var + self.eps)
+            x_hat = (X - mu) * std_inv
+
+            self.running_mean = self.momentum * self.running_mean + (1 - self.momentum) * mu
+            self.running_var = self.momentum * self.running_var + (1 - self.momentum) * var
+
+            self._cache = (X, x_hat, mu, var, std_inv)
+        else:
+            std_inv = 1.0 / np.sqrt(self.running_var + self.eps)
+            x_hat = (X - self.running_mean) * std_inv
+
+        return self.gamma * x_hat + self.beta
+
+    def backward(self, dout):
+        X, x_hat, mu, var, std_inv = self._cache
+        N = X.shape[0]
+        m_per_channel = X.shape[0] * X.shape[2] * X.shape[3]
+
+        # gamma / beta: mean-reduced (divisão por N)
+        self.dgamma = np.sum(dout * x_hat, axis=(0, 2, 3), keepdims=True) / N
+        self.dbeta = np.sum(dout, axis=(0, 2, 3), keepdims=True) / N
+
+        dx_hat = dout * self.gamma
+
+        dvar = np.sum(
+            dx_hat * (X - mu) * -0.5 * (std_inv ** 3),
+            axis=(0, 2, 3), keepdims=True,
+        )
+        dmu = np.sum(dx_hat * -std_inv, axis=(0, 2, 3), keepdims=True) + \
+              dvar * np.mean(-2.0 * (X - mu), axis=(0, 2, 3), keepdims=True)
+
+        dX = dx_hat * std_inv + dvar * 2.0 * (X - mu) / m_per_channel + dmu / m_per_channel
+        return dX
+
+    def params(self):
+        return {"gamma": self.gamma, "beta": self.beta}
+
+    def grads(self):
+        return {"gamma": self.dgamma, "beta": self.dbeta}
+
+    def buffers(self):
+        return {
+            "running_mean": self.running_mean,
+            "running_var": self.running_var,
+        }
+
+    def __repr__(self):
+        return f"BatchNorm2D(C={self.gamma.shape[1]})"
+
+
+# ============================================================
 # Conv2D (channels-first: N, C, H, W)
 # ============================================================
 class Conv2D(Layer):
@@ -294,9 +373,7 @@ class Conv2D(Layer):
         self.db = None
         self._cache = None
 
-    # ---------- helpers de im2col / col2im ----------
     def _im2col(self, X_pad, H_out, W_out):
-        """(N, C, H, W) → (N, C*kH*kW, H_out*W_out)"""
         N, C, _, _ = X_pad.shape
         cols = np.zeros((N, C, self.kH, self.kW, H_out, W_out), dtype=X_pad.dtype)
         for i in range(self.kH):
@@ -309,7 +386,6 @@ class Conv2D(Layer):
         return cols.reshape(N, C * self.kH * self.kW, H_out * W_out)
 
     def _col2im(self, dcols, X_shape, H_out, W_out):
-        """(N, C*kH*kW, H_out*W_out) → (N, C, H, W) — soma sobre janelas sobrepostas."""
         N, C, H, W = X_shape
         H_pad = H + 2 * self.padding
         W_pad = W + 2 * self.padding
@@ -326,7 +402,6 @@ class Conv2D(Layer):
             return dX_pad[:, :, self.padding:-self.padding, self.padding:-self.padding]
         return dX_pad
 
-    # ---------- forward / backward ----------
     def forward(self, X, training=True):
         N, C, H, W = X.shape
         assert C == self.in_channels, (
@@ -345,11 +420,11 @@ class Conv2D(Layer):
         else:
             X_pad = X
 
-        cols = self._im2col(X_pad, H_out, W_out)              # (N, K, P)
-        W_col = self.W.reshape(self.out_channels, -1)          # (C_out, K)
+        cols = self._im2col(X_pad, H_out, W_out)
+        W_col = self.W.reshape(self.out_channels, -1)
 
-        out = W_col @ cols                                     # (N, C_out, P)
-        out = out + self.b.reshape(1, self.out_channels, 1)    # broadcast correto
+        out = W_col @ cols
+        out = out + self.b.reshape(1, self.out_channels, 1)
         out = out.reshape(N, self.out_channels, H_out, W_out)
 
         self._cache = (X.shape, cols, H_out, W_out)
@@ -362,17 +437,12 @@ class Conv2D(Layer):
 
         dout_flat = dout.reshape(N, self.out_channels, P)
 
-        # Gradiente do viés: soma sobre N e P, divide por N (batch size)
-        # para ficar na MESMA convenção de Dense.backward (mean-reduced).
         self.db = dout_flat.sum(axis=(0, 2), keepdims=False).reshape(self.out_channels, 1) / N
-
-        # Gradiente do peso: (C_out, K) = Σ_n dout[n] @ cols[n].T / N
         self.dW = np.einsum("nop,njp->oj", dout_flat, cols) / N
         self.dW = self.dW.reshape(self.W.shape)
 
-        # Gradiente da entrada: sum-reduced (sem /N), consistente com Dense.dX.
-        W_col = self.W.reshape(self.out_channels, -1)          # (C_out, K)
-        dcols = W_col.T @ dout_flat                             # (N, K, P)
+        W_col = self.W.reshape(self.out_channels, -1)
+        dcols = W_col.T @ dout_flat
         dX = self._col2im(dcols, X_shape, H_out, W_out)
         return dX
 
@@ -393,12 +463,7 @@ class Conv2D(Layer):
 # MaxPool2D
 # ============================================================
 class MaxPool2D(Layer):
-    """
-    Max pooling 2D não sobreposto (ou com stride customizado).
-
-    Entrada:  (N, C, H, W)
-    Saída:    (N, C, H_out, W_out)
-    """
+    """Max pooling 2D não sobreposto (ou com stride customizado)."""
 
     def __init__(self, pool_size=2, stride=None):
         if isinstance(pool_size, int):
@@ -438,8 +503,8 @@ class MaxPool2D(Layer):
 
         dX = np.zeros(X_shape, dtype=dout.dtype)
 
-        n_idx = np.arange(N)[:, None]      # (N, 1)
-        c_idx = np.arange(C)[None, :]      # (1, C)
+        n_idx = np.arange(N)[:, None]
+        c_idx = np.arange(C)[None, :]
 
         for i in range(H_out):
             hs = i * self.sH
@@ -473,89 +538,3 @@ class Flatten(Layer):
 
     def __repr__(self):
         return "Flatten()"
-
-# ============================================================
-# BatchNorm2D (channels-first: N, C, H, W)
-# ============================================================
-class BatchNorm2D(Layer):
-    """
-    Batch Normalization para Conv2D (Ioffe & Szegedy, 2015).
-
-    Normaliza cada canal separadamente pelas estatísticas do mini-batch
-    sobre os eixos (N, H, W) durante o treino, e usa médias móveis no
-    inference. Parâmetros treináveis (gamma, beta) por canal.
-
-    Convenção de gradientes:
-      - dgamma, dbeta: mean-reduced (divididos por N)
-      - dX:           per-sample (sem /N)
-    Igual a Dense, Conv2D e BatchNorm.
-    """
-
-    def __init__(self, num_channels, momentum=0.9, eps=1e-5):
-        self.gamma = np.ones((1, num_channels, 1, 1), dtype=np.float64)
-        self.beta = np.zeros((1, num_channels, 1, 1), dtype=np.float64)
-        self.dgamma = None
-        self.dbeta = None
-
-        self.running_mean = np.zeros((1, num_channels, 1, 1), dtype=np.float64)
-        self.running_var = np.ones((1, num_channels, 1, 1), dtype=np.float64)
-
-        self.momentum = momentum
-        self.eps = eps
-        self._cache = None
-
-    def forward(self, X, training=True):
-        if training:
-            mu = X.mean(axis=(0, 2, 3), keepdims=True)
-            var = X.var(axis=(0, 2, 3), keepdims=True)
-            std_inv = 1.0 / np.sqrt(var + self.eps)
-            x_hat = (X - mu) * std_inv
-
-            self.running_mean = self.momentum * self.running_mean + (1 - self.momentum) * mu
-            self.running_var = self.momentum * self.running_var + (1 - self.momentum) * var
-
-            self._cache = (X, x_hat, mu, var, std_inv)
-        else:
-            std_inv = 1.0 / np.sqrt(self.running_var + self.eps)
-            x_hat = (X - self.running_mean) * std_inv
-
-        return self.gamma * x_hat + self.beta
-
-    def backward(self, dout):
-        X, x_hat, mu, var, std_inv = self._cache
-        N = X.shape[0]
-        m = X.size // N        # N * H * W / N = H * W * C? Não — m é o total por canal
-        # m por canal = N * H * W; use diretamente:
-        m_per_channel = X.shape[0] * X.shape[2] * X.shape[3]
-
-        # gamma / beta: mean-reduced (divisão por N)
-        self.dgamma = np.sum(dout * x_hat, axis=(0, 2, 3), keepdims=True) / N
-        self.dbeta = np.sum(dout, axis=(0, 2, 3), keepdims=True) / N
-
-        dx_hat = dout * self.gamma
-
-        # dvar / dmu: somas sobre (N, H, W) — per-sample
-        dvar = np.sum(
-            dx_hat * (X - mu) * -0.5 * (std_inv ** 3),
-            axis=(0, 2, 3), keepdims=True,
-        )
-        dmu = np.sum(dx_hat * -std_inv, axis=(0, 2, 3), keepdims=True) + \
-              dvar * np.mean(-2.0 * (X - mu), axis=(0, 2, 3), keepdims=True)
-
-        dX = dx_hat * std_inv + dvar * 2.0 * (X - mu) / m_per_channel + dmu / m_per_channel
-        return dX
-
-    def params(self):
-        return {"gamma": self.gamma, "beta": self.beta}
-
-    def grads(self):
-        return {"gamma": self.dgamma, "beta": self.dbeta}
-
-    def buffers(self):
-        return {
-            "running_mean": self.running_mean,
-            "running_var": self.running_var,
-        }
-
-    def __repr__(self):
-        return f"BatchNorm2D(C={self.gamma.shape[1]})"

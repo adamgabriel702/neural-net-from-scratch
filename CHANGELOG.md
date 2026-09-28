@@ -7,7 +7,7 @@ e o versionamento segue [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
-## [0.2.0] — 2026-09-28
+## [0.2.0] — 2024-XX-XX
 
 ### Adicionado
 - **Camadas recorrentes**: `SimpleRNN` e `LSTM` com BPTT manual
@@ -19,14 +19,23 @@ e o versionamento segue [Semantic Versioning](https://semver.org/lang/pt-BR/).
   - Função pública `clip_gradients` reutilizável em loops manuais
 - **Exemplo `examples/char_rnn.py`**: geração de texto caractere a caractere
   com amostragem por temperatura
-- 21 novos testes: `test_recurrent.py` (14) + `test_wrappers.py` (7)
-- 7 novos testes de gradient clipping: `test_gradient_clipping.py`
+- 30 novos testes: `test_recurrent.py` (14) + `test_wrappers.py` (9) +
+  `test_gradient_clipping.py` (7)
+
+### Corrigido
+- **`Activation.softmax`** agora usa `axis=-1` (era `axis=1`), corrigindo
+  o cálculo em tensores 3D `(N, T, C)` como os produzidos por
+  `TimeDistributed`. Bugs latentes com a mesma causa foram corrigidos em
+  `Loss.cce` e `ActivationLayer.backward` (ramo softmax). Nenhum teste 2D
+  pegava porque `axis=1` e `axis=-1` coincidem para `(N, C)`.
 
 ### Mudado
 - `nn/optimizers.py`: classe base `Optimizer` com `_clip` compartilhado
 - `nn/__init__.py`: exporta `clip_gradients`, `TimeDistributed`, `SimpleRNN`, `LSTM`
+- Convenção documentada em código: operações "sobre as classes" usam
+  sempre `axis=-1`.
 
-## [0.1.0] — 2026-09-28
+## [0.1.0] — 2024-XX-XX
 
 ### Adicionado
 - **Camadas**: `Dense`, `ActivationLayer`, `Dropout`, `BatchNorm`,

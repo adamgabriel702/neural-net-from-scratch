@@ -379,15 +379,6 @@ A divisão por `m` acontece somente em `Dense.backward`, `Conv2D.backward` e
 O gradiente da **entrada** (`dX`) é sempre per-sample para não ser dividido
 duas vezes ao longo da cadeia. É o que os testes de gradiente verificam.
 
-### Convenções
-
-- **Eixo de classe**: loss + softmax operam sempre em `axis=-1`.
-  Funciona uniformemente para `(N, C)`, `(N, T, C)` e `(N, H, W, C)`.
-- **Escala de gradiente**: `*_backward` da loss é sum-reduced; a divisão
-  por `m` (batch) acontece em `Dense.backward`, `Conv2D.backward` e
-  `BatchNorm.backward` apenas nos gradientes dos parâmetros.
-- **dX**: sempre per-sample (nunca dividido por `m`).
-
 ### Softmax + Categorical Cross-Entropy (fusão)
 
 Se a última camada é Softmax e a loss é CCE, o gradiente combinado em
