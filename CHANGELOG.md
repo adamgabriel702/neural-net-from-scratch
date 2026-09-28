@@ -7,7 +7,7 @@ e o versionamento segue [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
-## [0.2.0] — 2024-XX-XX
+## [0.2.0] — 2026-09-28
 
 ### Adicionado
 - **Camadas recorrentes**: `SimpleRNN` e `LSTM` com BPTT manual
@@ -35,7 +35,7 @@ e o versionamento segue [Semantic Versioning](https://semver.org/lang/pt-BR/).
 - Convenção documentada em código: operações "sobre as classes" usam
   sempre `axis=-1`.
 
-## [0.1.0] — 2024-XX-XX
+## [0.1.0] — 2026-09-28
 
 ### Adicionado
 - **Camadas**: `Dense`, `ActivationLayer`, `Dropout`, `BatchNorm`,
