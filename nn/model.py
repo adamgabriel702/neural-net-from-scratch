@@ -67,7 +67,7 @@ class Sequential:
     def fit(
         self,
         X,
-        y,
+        y=None,
         epochs=100,
         batch_size=32,
         verbose=True,
@@ -75,48 +75,64 @@ class Sequential:
         validation_data=None,
         scheduler=None,
         callbacks=None,
+        transform=None,
+        seed=None,
     ):
         """
         Treina o modelo.
 
-        Parâmetros extras
-        -----------------
-        scheduler : _LRScheduler ou None
-            Se fornecido, tem seu `step()` chamado ao final de cada época.
-        callbacks : list de Callback ou None
-            Executados ao final de cada época com `(model, epoch, logs)`.
+        Aceita dois formatos:
+          - fit(X, y, batch_size=..., transform=...)
+          - fit(DataLoader(X, y, ...))
+
+        Parâmetros
+        ----------
+        transform : callable ou None
+            Aplicado em cada batch de treino (data augmentation).
+            Ignorado se `X` for um `DataLoader`.
+        seed : int ou None
+            Semente do `DataLoader` interno (quando aplicável).
         """
+        from .data import DataLoader
+
         if self.optimizer is None:
             raise RuntimeError(
                 "Chame `compile(loss=..., optimizer=...)` antes de `fit`."
             )
 
-        X = np.asarray(X, dtype=np.float64)
-        y = np.asarray(y, dtype=np.float64)
-
         callbacks = callbacks or []
 
-        n = X.shape[0]
+        # Aceita DataLoader direto
+        if isinstance(X, DataLoader):
+            loader = X
+            X_arr = loader.X
+            y_arr = loader.y
+        else:
+            X_arr = np.asarray(X, dtype=np.float64)
+            y_arr = np.asarray(y, dtype=np.float64)
+            loader = DataLoader(
+                X_arr, y_arr,
+                batch_size=batch_size,
+                shuffle=shuffle,
+                transform=transform,
+                seed=seed,
+            )
+
+        n = X_arr.shape[0]
         log_every = max(1, epochs // 10)
 
         for cb in callbacks:
             cb.on_train_begin(self)
 
         for epoch in range(1, epochs + 1):
-            idx = np.random.permutation(n) if shuffle else np.arange(n)
-            Xs, ys = X[idx], y[idx]
-
-            for s in range(0, n, batch_size):
-                Xb = Xs[s:s + batch_size]
-                yb = ys[s:s + batch_size]
-
+            for Xb, yb in loader:
                 self.forward(Xb, training=True)
                 self.backward(yb)
                 self.optimizer.step(self.layers)
 
-            # Loss no dataset completo em modo eval
-            y_pred = self.forward(X, training=False)
-            loss = float(self.loss_fn(y, y_pred))
+            # Métricas no dataset completo em modo eval
+            y_pred = self.forward(X_arr, training=False)
+            loss = float(self.loss_fn(y_arr, y_pred))
             self.history["loss"].append(loss)
 
             logs = {"loss": loss}
@@ -142,16 +158,16 @@ class Sequential:
                     msg += f" | lr: {logs['lr']:.2e}"
                 print(msg)
 
-            # Callbacks
             for cb in callbacks:
                 cb.on_epoch_end(self, epoch, logs)
 
-            # Early stopping pode interromper
             if any(getattr(cb, "should_stop", False) for cb in callbacks):
                 if verbose:
-                    stopped = [cb for cb in callbacks if getattr(cb, "should_stop", False)]
+                    stopped = [cb for cb in callbacks
+                               if getattr(cb, "should_stop", False)]
                     for cb in stopped:
-                        print(f"  [early stop] {cb.__class__.__name__} na época {epoch}")
+                        print(f"  [early stop] {cb.__class__.__name__} "
+                              f"na época {epoch}")
                 break
 
         for cb in callbacks:

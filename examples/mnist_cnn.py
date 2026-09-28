@@ -7,7 +7,7 @@ import numpy as np
 from nn import (
     Sequential, Conv2D, BatchNorm2D, MaxPool2D, Flatten, Dense,
     ActivationLayer, Dropout, Adam, CosineAnnealing,
-    EarlyStopping, ModelCheckpoint,
+    EarlyStopping, ModelCheckpoint, DataLoader,
 )
 from nn.datasets import load_mnist
 from nn.utils import one_hot, train_test_split, evaluate_and_report
@@ -37,6 +37,7 @@ def build_model():
 
 def main():
     import os
+    from nn import DataLoader, Compose, RandomShift, GaussianNoise
 
     smoke = os.environ.get("SMOKE") == "1"
     N = 512 if smoke else 8000
@@ -58,6 +59,21 @@ def main():
 
     scheduler = CosineAnnealing(opt, t_max=EPOCHS, eta_min=1e-5)
 
+    # Data augmentation: pequeno deslocamento + ruído leve
+    # (flip horizontal NÃO é usado: 6 e 9 se confundem)
+    aug = Compose([
+        RandomShift(max_shift=2, seed=0),
+        GaussianNoise(sigma=0.05, seed=0),
+    ])
+
+    train_loader = DataLoader(
+        Xtr, ytr_oh,
+        batch_size=32,
+        shuffle=True,
+        transform=aug,
+        seed=0,
+    )
+
     os.makedirs("checkpoints", exist_ok=True)
     callbacks = [
         EarlyStopping(monitor="val_loss", patience=4, mode="min"),
@@ -66,8 +82,8 @@ def main():
     ]
 
     model.fit(
-        Xtr, ytr_oh,
-        epochs=EPOCHS, batch_size=32,
+        train_loader,
+        epochs=EPOCHS,
         verbose=not smoke,
         validation_data=(Xval, yval_oh),
         scheduler=scheduler,
@@ -94,7 +110,6 @@ def main():
                      title="Filtros da 1ª Conv2D (média sobre canais)")
 
     model.save("checkpoints/mnist_cnn_final.npz")
-
 
 if __name__ == "__main__":
     main()
