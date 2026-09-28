@@ -1,0 +1,8 @@
+include LICENSE
+include README.md
+include requirements.txt
+recursive-include tests *.py
+recursive-include examples *.py
+recursive-include notebooks *.py *.ipynb
+recursive-include figures *.png
+global-exclude __pycache__ *.py[cod] *$py.class
