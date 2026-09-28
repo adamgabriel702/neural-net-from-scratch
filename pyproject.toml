@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pico-nn"
-version = "0.1.0"
+version = "0.2.0"
 description = "Rede neural implementada do zero com NumPy — sem PyTorch, sem TensorFlow."
 readme = "README.md"
 requires-python = ">=3.10"

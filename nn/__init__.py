@@ -3,7 +3,9 @@ from .layers import (
     Dense, ActivationLayer, Dropout, BatchNorm, BatchNorm2D,
     Conv2D, MaxPool2D, Flatten,
 )
-from .optimizers import SGD, Momentum, Adam
+from .wrappers import TimeDistributed
+from .recurrent import SimpleRNN, LSTM
+from .optimizers import SGD, Momentum, Adam, clip_gradients
 from .schedulers import (
     StepLR, ExponentialLR, CosineAnnealing, WarmupCosine,
 )
@@ -21,7 +23,9 @@ __all__ = [
     "Dense", "ActivationLayer", "Dropout",
     "BatchNorm", "BatchNorm2D",
     "Conv2D", "MaxPool2D", "Flatten",
-    "SGD", "Momentum", "Adam",
+    "TimeDistributed",
+    "SimpleRNN", "LSTM",
+    "SGD", "Momentum", "Adam", "clip_gradients",
     "StepLR", "ExponentialLR", "CosineAnnealing", "WarmupCosine",
     "EarlyStopping", "ModelCheckpoint", "History",
     "DataLoader",
